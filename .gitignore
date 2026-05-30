@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+data/clip.mp4
+data/table.png
+yt-dlp.exe
