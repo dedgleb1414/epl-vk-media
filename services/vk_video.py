@@ -1,18 +1,23 @@
 import requests
 import os
 import subprocess
+import sys
 from config import VK_TOKEN, GROUP_ID, USER_TOKEN
 
-YT_DLP = "D:\\epl-vk-media\\yt-dlp.exe"
+def get_ytdlp_cmd():
+    if os.path.exists("D:\\epl-vk-media\\yt-dlp.exe"):
+        return "D:\\epl-vk-media\\yt-dlp.exe"
+    return "yt-dlp"
 
-def download_video(youtube_url, output_path="data/clip.mp4"):
+def download_video(youtube_url, output_path="/tmp/clip.mp4"):
+    if os.name == "nt":
+        output_path = "data/clip.mp4"
     try:
         if os.path.exists(output_path):
             os.remove(output_path)
 
-        # Сначала пробуем 720p+ с ffmpeg
         cmd = [
-            YT_DLP,
+            get_ytdlp_cmd(),
             "-f", "bestvideo[height>=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height>=720]+bestaudio/best[height>=720]/best",
             "-o", output_path,
             "--no-playlist",
@@ -26,10 +31,9 @@ def download_video(youtube_url, output_path="data/clip.mp4"):
             print("Видео скачано: " + output_path + " (" + str(round(size_mb, 1)) + " MB)")
             return output_path
 
-        # Запасной вариант — лучшее mp4 без слияния
         print("Пробую запасной формат...")
         cmd2 = [
-            YT_DLP,
+            get_ytdlp_cmd(),
             "-f", "best[ext=mp4]/best",
             "-o", output_path,
             "--no-playlist",
@@ -39,10 +43,10 @@ def download_video(youtube_url, output_path="data/clip.mp4"):
 
         if result2.returncode == 0 and os.path.exists(output_path):
             size_mb = os.path.getsize(output_path) / 1024 / 1024
-            print("Видео скачано (запасной): " + output_path + " (" + str(round(size_mb, 1)) + " MB)")
+            print("Видео скачано: " + output_path + " (" + str(round(size_mb, 1)) + " MB)")
             return output_path
 
-        print("Ошибка скачивания: " + result2.stderr[:300])
+        print("Ошибка: " + result2.stderr[:300])
         return None
 
     except Exception as e:

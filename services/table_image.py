@@ -17,15 +17,18 @@ def generate_table_image(standings, league_name):
         font_bold = ImageFont.truetype("arialbd.ttf", 20)
         font_title = ImageFont.truetype("arialbd.ttf", 24)
     except:
-        font = ImageFont.load_default()
-        font_bold = font
-        font_title = font
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+            font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+        except:
+            font = ImageFont.load_default()
+            font_bold = font
+            font_title = font
 
-    # Заголовок
     draw.rectangle([0, 0, width, header_h], fill=(30, 30, 50))
-    draw.text((padding, 15), "📊 " + league_name, font=font_title, fill=(255, 215, 0))
+    draw.text((padding, 15), "Таблица " + league_name, font=font_title, fill=(255, 215, 0))
 
-    # Шапка таблицы
     y = header_h + 5
     draw.text((padding, y), "#", font=font_bold, fill=(180, 180, 180))
     draw.text((60, y), "Команда", font=font_bold, fill=(180, 180, 180))
@@ -38,13 +41,11 @@ def generate_table_image(standings, league_name):
     y += row_h
 
     for i, s in enumerate(standings):
-        # Чередование строк
         if i % 2 == 0:
             draw.rectangle([0, y - 4, width, y + row_h - 6], fill=(28, 28, 42))
         else:
             draw.rectangle([0, y - 4, width, y + row_h - 6], fill=(22, 22, 35))
 
-        # Цвет позиции
         if i < 4:
             num_color = (100, 200, 100)
         elif i < 6:
@@ -64,6 +65,8 @@ def generate_table_image(standings, league_name):
 
         y += row_h
 
-    path = "data/table.png"
+    path = "/tmp/table.png"
+    if os.name == "nt":
+        path = "data/table.png"
     img.save(path)
     return path
