@@ -70,7 +70,7 @@ def get_match_photos(match, league_code):
 @app.route("/", methods=["POST"])
 def callback():
     data = request.json
-    print(data)
+    print("VK CALLBACK:", data)
 
     if data["type"] == "confirmation":
         return CONFIRMATION_TOKEN
