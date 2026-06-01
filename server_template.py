@@ -5,7 +5,7 @@ from services.image_search import find_match_image
 
 app = Flask(__name__)
 import os
-CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN", "0a1370a2")
+CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN", "8dd617c0")
 
 state = {}
 drafts = {}
