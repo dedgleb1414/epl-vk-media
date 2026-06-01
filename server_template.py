@@ -4,7 +4,8 @@ from services.football_api import get_matches, get_upcoming_matches, get_leagues
 from services.image_search import find_match_image
 
 app = Flask(__name__)
-CONFIRMATION_TOKEN = "0a1370a2"
+import os
+CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN", "0a1370a2")
 
 state = {}
 drafts = {}
