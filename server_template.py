@@ -284,21 +284,13 @@ def callback():
         elif state.get(user_id) == "waiting_clip_confirm":
             if text.lower() == "да":
                 clip = drafts.get(user_id)
-                send_admin(user_id, "Скачиваю видео... это займёт 1-2 минуты.")
-                from services.vk_video import download_video, upload_video_to_vk
+                send_admin(user_id, "Генерирую пост...")
                 from agents.clips_agent import generate_clip_post
-                file_path = download_video(clip["url"])
-                if not file_path:
-                    send_admin(user_id, "Ошибка скачивания. Попробуй другой клип.")
-                    state[user_id] = None
-                else:
-                    send_admin(user_id, "Загружаю в VK...")
-                    attachment = upload_video_to_vk(file_path, clip["title"])
-                    post = generate_clip_post(clip)
-                    drafts[user_id] = post
-                    photo_attachments[user_id] = {"options": [], "chosen": [attachment] if attachment else []}
-                    state[user_id] = "waiting_clip_approve"
-                    send_admin(user_id, "Черновик:\n\n" + post + "\n\nда — опубликовать\nнет — отмена")
+                post = generate_clip_post(clip)
+                drafts[user_id] = post
+                photo_attachments[user_id] = {"options": [], "chosen": [clip["attachment"]]}
+                state[user_id] = "waiting_clip_approve"
+                send_admin(user_id, "Черновик:\n\n" + post + "\n\nда — опубликовать\nнет — отмена")
             elif text.lower() == "нет":
                 send_admin(user_id, "Ищу другие клипы...")
                 from agents.clips_agent import get_clips_list
