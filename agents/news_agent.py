@@ -1,8 +1,8 @@
-from services.football_api import get_next_matches
+from services.football_api import get_matches
 from services.ai_writer import write_post
 
 def find_news():
-    matches = get_next_matches()
+    matches = get_matches("eng.1")
 
     if not matches:
         return "Матчи не найдены."
@@ -17,7 +17,7 @@ def find_news():
     return txt
 
 def generate_post(match_index=0):
-    matches = get_next_matches()
+    matches = get_matches("eng.1")
 
     if not matches:
         return "Матчи не найдены."

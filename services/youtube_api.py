@@ -2,9 +2,9 @@ import requests
 from config import USER_TOKEN
 
 LEAGUE_SEARCH = {
-    "1": ["АПЛ обзор матча", "Premier League highlights", "английская премьер лига голы"],
-    "2": ["РПЛ обзор матча", "российская премьер лига голы", "РПЛ лучшие моменты"],
-    "3": ["Ла Лига обзор матча", "La Liga highlights", "испанская лига голы"],
+    "1": ["АПЛ голы обзор", "Premier League goals highlights", "английская премьер лига лучшие моменты"],
+    "2": ["РПЛ голы обзор", "российская премьер лига голы", "РПЛ лучшие моменты"],
+    "3": ["Ла Лига голы обзор", "La Liga goals highlights", "испанская лига лучшие моменты"],
 }
 
 def search_football_clips(query, max_results=5):
@@ -16,6 +16,7 @@ def search_football_clips(query, max_results=5):
             "sort": 0,
             "hd": 1,
             "filters": "youtube",
+            "shorter": 600,
             "access_token": USER_TOKEN,
             "v": "5.199"
         }
@@ -26,10 +27,12 @@ def search_football_clips(query, max_results=5):
         clips = []
         items = data.get("response", {}).get("items", [])
         for item in items:
+            duration = item.get("duration", 0)
+            if duration <= 0:
+                continue
             owner_id = item.get("owner_id")
             video_id = item.get("id")
             title = item.get("title", "")
-            duration = item.get("duration", 0)
             clips.append({
                 "id": str(owner_id) + "_" + str(video_id),
                 "title": title,
