@@ -7,6 +7,7 @@ LEAGUE_CODES = {
     "3": {"name": "Бундеслига", "id": 78},
     "4": {"name": "Лига 1", "id": 61},
     "5": {"name": "РПЛ", "id": 235},
+    "6": {"name": "Чемпионат мира", "id": 1, "season": 2022},
 }
 
 def get_top_scorers(league_key):
@@ -16,7 +17,7 @@ def get_top_scorers(league_key):
     try:
         url = "https://v3.football.api-sports.io/players/topscorers"
         headers = {"x-apisports-key": FOOTBALL_KEY}
-        params = {"league": league["id"], "season": 2024}
+        params = {"league": league["id"], "season": league.get("season", 2024)}
         r = requests.get(url, headers=headers, params=params, timeout=10)
         data = r.json()
         print("Topscorers:", str(data)[:200])
@@ -45,3 +46,7 @@ def format_scorers(scorers, league_name):
 def generate_scorers_post(scorers, league_name):
     from services.ai_writer import write_scorers_post
     return write_scorers_post(league_name, scorers[:3])
+
+def generate_scorers_posts(scorers, league_name):
+    from services.ai_writer import write_three_scorers_posts
+    return write_three_scorers_posts(league_name, scorers[:3])

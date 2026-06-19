@@ -110,6 +110,33 @@ def write_scorers_post(league_name, top3):
     )
     return response.choices[0].message.content
 
+def write_three_scorers_posts(league_name, top3):
+    names = ", ".join([s["name"] + " (" + str(s["goals"]) + " голов)" for s in top3])
+    prompt = ("Ты редактор спортивного VK сообщества.\n"
+              "Напиши 3 разных варианта поста на русском про топ бомбардиров " + league_name + ".\n"
+              "Лидеры: " + names + "\n"
+              "Требования:\n"
+              "- 3-4 предложения\n"
+              "- Используй эмодзи\n"
+              "- Стиль живой и эмоциональный\n"
+              "- НЕ пиши \"Вариант 1\" и т.д.\n"
+              "- Разделяй варианты строкой ---")
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=900
+    )
+    raw = response.choices[0].message.content
+    parts = raw.split("---")
+    posts = []
+    for p in parts:
+        clean = p.strip()
+        if len(clean) > 20:
+            posts.append(clean)
+    while len(posts) < 3:
+        posts.append(posts[0] if posts else raw)
+    return posts[:3]
+
 def write_upcoming_post(match_name, date, competition):
     prompt = "Ты редактор спортивного VK сообщества.\nНапиши анонс матча на русском:\n" + match_name + "\nДата: " + date + "\nТурнир: " + competition + "\nТребования:\n- 3-4 предложения\n- Используй эмодзи\n- Стиль живой и эмоциональный\n- Призыв следить за матчем"
     response = client.chat.completions.create(

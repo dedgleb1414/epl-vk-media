@@ -1,11 +1,32 @@
+import sys
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+import requests
+import threading
+import time
 from flask import Flask, request
 from services.vk_api import send_admin, publish_post, upload_photo_to_vk, upload_local_photo
 from services.football_api import get_matches, get_upcoming_matches, get_leagues_menu, LEAGUES
 from services.image_search import find_match_image
+from services.vk_chat_poll import check_and_alert, format_score, send_to_chat
+from config import CHAT_PEER_ID
 
 app = Flask(__name__)
 import os
 CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN", "0a1370a2")
+
+CHECK_INTERVAL_SECONDS = 240
+
+def poll_watcher_loop():
+    while True:
+        try:
+            check_and_alert(CHAT_PEER_ID)
+        except Exception as e:
+            print("Ошибка фоновой проверки опроса: " + str(e))
+        time.sleep(CHECK_INTERVAL_SECONDS)
+
+threading.Thread(target=poll_watcher_loop, daemon=True).start()
 
 state = {}
 drafts = {}
@@ -45,26 +66,57 @@ def get_score(match):
 
 def get_match_photos(match, league_code):
     photos = []
+    seen_urls = set()
+
+    def add(label, url):
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            photos.append({"label": label, "url": url})
+
+    summary = {}
     try:
-        competitors = match["competitions"][0]["competitors"]
-        for c in competitors:
-            logo = c["team"].get("logo")
-            team_name = c["team"]["displayName"]
-            if logo:
-                photos.append({"label": "Логотип " + team_name, "url": logo})
+        event_id = match.get("id")
+        if event_id:
+            r = requests.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/soccer/{league_code}/summary",
+                params={"event": event_id}, timeout=15
+            )
+            summary = r.json()
+            images = summary.get("article", {}).get("images", [])
+            for img in images:
+                url = img.get("url", "")
+                if url.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    add("Фото матча", url)
+    except Exception as e:
+        print("Ошибка получения фото статьи: " + str(e))
+
+    try:
+        venue_images = summary.get("gameInfo", {}).get("venue", {}).get("images", [])
+        for img in venue_images:
+            add("Фото стадиона", img.get("href"))
+    except Exception as e:
+        print("Ошибка получения фото стадиона: " + str(e))
+
+    try:
         details = match["competitions"][0].get("details", [])
-        seen = set()
+        seen_athletes = set()
         for d in details:
             if d.get("scoringPlay"):
                 for athlete in d.get("athletesInvolved", []):
                     aid = athlete["id"]
-                    if aid not in seen:
-                        seen.add(aid)
-                        headshot = athlete.get("headshot")
-                        if headshot:
-                            photos.append({"label": "Фото " + athlete["displayName"], "url": headshot})
+                    if aid not in seen_athletes:
+                        seen_athletes.add(aid)
+                        add("Фото " + athlete["displayName"], athlete.get("headshot"))
     except Exception as e:
-        print("Ошибка get_match_photos: " + str(e))
+        print("Ошибка получения фото игроков: " + str(e))
+
+    try:
+        competitors = match["competitions"][0]["competitors"]
+        for c in competitors:
+            add("Логотип " + c["team"]["displayName"], c["team"].get("logo"))
+    except Exception as e:
+        print("Ошибка получения логотипов: " + str(e))
+
     return photos[:5]
 
 @app.route("/", methods=["POST"])
@@ -83,9 +135,13 @@ def callback():
 
         msg = data["object"]["message"]
         user_id = msg["from_id"]
+        peer_id = msg.get("peer_id")
         text = msg["text"].strip()
 
-        if text == "/старт":
+        if peer_id == CHAT_PEER_ID and text.lower() in ("/счёт", "/счет"):
+            send_to_chat(peer_id, format_score())
+
+        elif text == "/старт":
             send_admin(user_id, "EPL BOT активен")
 
         elif text == "/помощь":
@@ -149,7 +205,8 @@ def callback():
             if text in LEAGUES:
                 league = LEAGUES[text]
                 send_admin(user_id, "Загружаю топ бомбардиров...")
-                from agents.scorers_agent import get_top_scorers, format_scorers, generate_scorers_post
+                from agents.scorers_agent import get_top_scorers, format_scorers, generate_scorers_posts
+                from services.table_image import generate_scorers_image
                 scorers = get_top_scorers(text)
                 if not scorers:
                     send_admin(user_id, "Данные не найдены.")
@@ -157,19 +214,36 @@ def callback():
                 else:
                     table = format_scorers(scorers, league["name"])
                     send_admin(user_id, table)
-                    send_admin(user_id, "Генерирую пост...")
-                    post = generate_scorers_post(scorers, league["name"])
-                    drafts[user_id] = post
-                    photo_attachments[user_id] = {"options": [], "chosen": []}
-                    state[user_id] = "waiting_top_approve"
-                    send_admin(user_id, "Черновик:\n\n" + post + "\n\nда — опубликовать\nнет — отмена")
+                    img_path = generate_scorers_image(scorers, league["name"])
+                    attachment = upload_local_photo(img_path)
+                    photo_attachments[user_id] = {"options": [], "chosen": [attachment] if attachment else []}
+                    send_admin(user_id, "Генерирую 3 варианта поста...")
+                    posts = generate_scorers_posts(scorers, league["name"])
+                    drafts[user_id] = posts
+                    state[user_id] = "waiting_top_post_choice"
+                    txt = "Выбери вариант — напиши 1, 2 или 3:\n\n"
+                    for i, p in enumerate(posts):
+                        txt += "--- Вариант " + str(i+1) + " ---\n" + p + "\n\n"
+                    send_admin(user_id, txt)
             else:
-                send_admin(user_id, "Напиши номер лиги от 1 до 5.")
+                send_admin(user_id, "Напиши номер лиги от 1 до 6.")
+
+        elif state.get(user_id) == "waiting_top_post_choice":
+            if text in ["1", "2", "3"]:
+                posts = drafts.get(user_id, [])
+                chosen = posts[int(text) - 1]
+                drafts[user_id] = chosen
+                state[user_id] = "waiting_top_approve"
+                send_admin(user_id, "Черновик:\n\n" + chosen + "\n\nда — опубликовать с таблицей\nнет — отмена")
+            else:
+                send_admin(user_id, "Напиши 1, 2 или 3.")
 
         elif state.get(user_id) == "waiting_top_approve":
             if text.lower() == "да":
                 post = drafts.get(user_id, "")
-                result = publish_post(post)
+                attachments = photo_attachments.get(user_id, {}).get("chosen", [])
+                attachment_str = ",".join(attachments) if attachments else None
+                result = publish_post(post, attachment_str)
                 if "response" in result:
                     send_admin(user_id, "Пост опубликован!")
                 else:
@@ -193,7 +267,7 @@ def callback():
                     state[user_id] = "waiting_clip_choice"
                     send_admin(user_id, txt + "Напиши номер клипа.")
             else:
-                send_admin(user_id, "Напиши номер лиги: 1, 2 или 3.")
+                send_admin(user_id, "Напиши номер лиги от 1 до 4.")
 
         elif state.get(user_id) == "waiting_news_choice":
             if text.isdigit():
@@ -349,7 +423,7 @@ def callback():
                     state[user_id] = "waiting_stats_approve"
                     send_admin(user_id, "Черновик:\n\n" + post + "\n\nда — опубликовать с таблицей\nнет — отмена")
             else:
-                send_admin(user_id, "Напиши номер лиги от 1 до 5.")
+                send_admin(user_id, "Напиши номер лиги от 1 до 6.")
 
         elif state.get(user_id) == "waiting_stats_approve":
             if text.lower() == "да":
@@ -391,7 +465,7 @@ def callback():
                     state[user_id] = "waiting_match"
                     send_admin(user_id, txt)
             else:
-                send_admin(user_id, "Напиши номер лиги от 1 до 5.")
+                send_admin(user_id, "Напиши номер лиги от 1 до 6.")
 
         elif state.get(user_id) == "waiting_match":
             if text.isdigit():

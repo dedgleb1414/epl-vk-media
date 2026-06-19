@@ -48,7 +48,7 @@ def get_football_news(limit=5):
                     "summary": summary[:300],
                     "link": entry.get("link", ""),
                     "source": feed.feed.get("title", ""),
-                    "photos": unique_photos[:3],
+                    "photos": unique_photos[:5],
                 })
         except Exception as e:
             print("Ошибка RSS: " + str(e))
@@ -61,6 +61,35 @@ def get_football_news(limit=5):
             unique.append(a)
 
     return unique[:limit]
+
+def scrape_article_images(link, limit=5):
+    if not link:
+        return []
+    try:
+        r = requests.get(link, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        html = r.text
+    except Exception as e:
+        print("Ошибка загрузки страницы статьи: " + str(e))
+        return []
+
+    raw_urls = re.findall(r'https?://[^\s"\'<>]+\.(?:jpg|jpeg|png)(?:\?[^\s"\'<>]*)?', html)
+    blocklist = ("icon", "favicon", "static.files", "/assets/", "sprite", "logo", "context_image", "poster-")
+
+    groups = {}
+    order = []
+    for url in raw_urls:
+        low = url.lower()
+        if any(b in low for b in blocklist):
+            continue
+        key = re.sub(r'/\d{2,4}/', '/SIZE/', url)
+        m = re.search(r'/(\d{2,4})/', url)
+        width = int(m.group(1)) if m else 0
+        if key not in groups or width > groups[key][1]:
+            if key not in groups:
+                order.append(key)
+            groups[key] = (url, width)
+
+    return [groups[k][0] for k in order][:limit]
 
 def get_high_quality_photo(url):
     if not url:

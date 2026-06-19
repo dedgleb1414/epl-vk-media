@@ -1,13 +1,13 @@
-from services.football_api import get_matches
+from services.football_api import get_current_round_matches
 from services.ai_writer import write_post
 
 def find_news():
-    matches = get_matches("eng.1")
+    matches = get_current_round_matches("eng.1")
 
     if not matches:
-        return "Матчи не найдены."
+        return "Актуальной информации о текущем туре пока нет."
 
-    txt = "Матчи АПЛ:\n\n"
+    txt = "Матчи АПЛ текущего тура:\n\n"
     for m in matches:
         name = m["name"]
         date = m["date"][:10]
@@ -17,10 +17,10 @@ def find_news():
     return txt
 
 def generate_post(match_index=0):
-    matches = get_matches("eng.1")
+    matches = get_current_round_matches("eng.1")
 
     if not matches:
-        return "Матчи не найдены."
+        return "Актуальной информации о текущем туре пока нет."
 
     m = matches[match_index]
     name = m["name"]

@@ -11,8 +11,11 @@ def send_admin(user_id, text):
         "access_token": VK_TOKEN,
         "v": "5.199"
     }
-    r = requests.post(url, data=data)
-    print(r.text)
+    try:
+        r = requests.post(url, data=data, timeout=15)
+        print(r.text)
+    except requests.exceptions.RequestException as e:
+        print("Ошибка отправки сообщения: " + str(e))
 
 def get_wall_upload_server():
     url = "https://api.vk.com/method/photos.getWallUploadServer"
