@@ -9,8 +9,8 @@ from flask import Flask, request
 from services.vk_api import send_admin, publish_post, upload_photo_to_vk, upload_local_photo
 from services.football_api import get_matches, get_upcoming_matches, get_leagues_menu, LEAGUES
 from services.image_search import find_match_image
-from services.vk_chat_poll import check_and_alert, format_score, send_to_chat
-from config import CHAT_PEER_ID
+from services.vk_chat_poll import check_and_alert, format_score, send_to_chat, remove_voter, update_voter_list_message, delete_chat_message
+from config import CHAT_PEER_ID, ADMIN_ID
 
 app = Flask(__name__)
 import os
@@ -112,6 +112,28 @@ def get_match_photos(match, league_code):
 
     try:
         competitors = match["competitions"][0]["competitors"]
+        team_names = [c["team"]["displayName"].lower() for c in competitors]
+
+        def mentions_team(text):
+            text = (text or "").lower()
+            return any(name in text for name in team_names)
+
+        for article in summary.get("news", {}).get("articles", []):
+            headline = article.get("headline", "")
+            if mentions_team(headline) or mentions_team(article.get("description", "")):
+                for img in article.get("images", []):
+                    url = img.get("url", "")
+                    if url.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                        add(img.get("name", "Новость турнира"), url)
+
+        for video in summary.get("videos", []):
+            if mentions_team(video.get("headline", "")):
+                add(video.get("headline", "Видео-превью")[:40], video.get("thumbnail"))
+    except Exception as e:
+        print("Ошибка получения новостных фото: " + str(e))
+
+    try:
+        competitors = match["competitions"][0]["competitors"]
         for c in competitors:
             add("Логотип " + c["team"]["displayName"], c["team"].get("logo"))
     except Exception as e:
@@ -140,6 +162,23 @@ def callback():
 
         if peer_id == CHAT_PEER_ID and text.lower() in ("/счёт", "/счет"):
             send_to_chat(peer_id, format_score())
+
+        elif peer_id == CHAT_PEER_ID and text.lower().startswith("/вычеркнуть"):
+            if str(user_id) != str(ADMIN_ID):
+                delete_chat_message(peer_id, msg.get("conversation_message_id"))
+            else:
+                parts = text.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    removed = remove_voter(int(parts[1]))
+                    if removed:
+                        update_voter_list_message(peer_id)
+                    else:
+                        send_to_chat(peer_id, "Неверный номер.")
+                else:
+                    send_to_chat(peer_id, "Напиши: /вычеркнуть <номер>")
+
+        elif peer_id == CHAT_PEER_ID and str(user_id) != str(ADMIN_ID):
+            delete_chat_message(peer_id, msg.get("conversation_message_id"))
 
         elif text == "/старт":
             send_admin(user_id, "EPL BOT активен")
